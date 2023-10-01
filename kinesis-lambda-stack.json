@@ -1,0 +1,157 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "creating s3 bucket, python lambda function, Kinesis stream, and source mapping",
+    "Resources": {
+        "lambdaS3Bucket": {
+            "Type": "AWS::S3::Bucket",
+            "Properties": {
+                "BucketName": "kinesis-lambda-rinki"
+            }
+        },
+        "lambdaS3Role": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "RoleName": "lambda-kinesis-role",
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": "lambda.amazonaws.com"
+                            },
+                            "Action": "sts:AssumeRole"
+                        }
+                    ]
+                },
+                "Description": "Lambda Policy",
+                "Path": "/",
+                "Policies": [
+                    {
+                        "PolicyName": "lambdaS3Policy",
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Action": [
+                                        "s3:Get*",
+                                        "s3:List*",
+                                        "s3:Describe*",
+                                        "s3:PutObject"
+                                    ],
+                                    "Resource": [
+                                        "arn:aws:s3:::kinesis-lambda-rinki",
+                                        "arn:aws:s3:::kinesis-lambda-rinki/*"
+                                    ],
+                                    "Effect": "Allow",
+                                    "Sid": "s3access"
+                                },
+                                {
+                                    "Action": [
+                                        "kinesis:GetRecords",
+                                        "kinesis:GetShardIterator",
+                                        "kinesis:DescribeStream",
+                                        "kinesis:ListShards",
+                                        "kinesis:ListStreams",
+                                        "kinesis:PutRecord"
+                                    ],
+                                    "Resource": [
+                                        "arn:aws:kinesis:us-east-2:339567686205:stream/myKinesisStream"
+                                    ],
+                                    "Effect": "Allow",
+                                    "Sid": "kinesisaccess"
+                                },
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "dynamodb:PutItem",
+                                        "dynamodb:UpdateItem",
+                                        "dynamodb:GetRecords",
+                                        "dynamodb:GetShardIterator",
+                                        "dynamodb:DescribeStream",
+                                        "dynamodb:ListStreams"
+                                    ],
+                                    "Resource": [
+                                        "arn:aws:dynamodb:us-east-2:339567686205:table/Employee"
+                                    ],
+                                    "Sid": "dynamodbaccess"
+                                },
+                                {
+                                    "Sid": "LogAccess",
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "logs:*"
+                                    ],
+                                    "Resource": "arn:aws:logs:*:*:*"
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        "lambdaFunction": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "FunctionName": "lambda-kinesis-Function",
+                "Handler": "lambda_function.lambda_handler",
+                "Role": {
+                    "Fn::GetAtt": [
+                        "lambdaS3Role",
+                        "Arn"
+                    ]
+                },
+                "Runtime": "python3.8",
+                "Code": {
+                    "S3Bucket": "lambda-code-rinki2",
+                    "S3Key": "lambda_function.zip"
+                }
+            }
+        },
+        "kinesisStream": {
+            "Type": "AWS::Kinesis::Stream",
+            "Properties": {
+                "Name": "myKinesisStream",
+                "ShardCount": 1
+            }
+        },
+        "kinesisEventSourceMapping": {
+            "Type": "AWS::Lambda::EventSourceMapping",
+            "Properties": {
+                "EventSourceArn": {
+                    "Fn::GetAtt": [
+                        "kinesisStream",
+                        "Arn"
+                    ]
+                },
+                "FunctionName": {
+                    "Fn::GetAtt": [
+                        "lambdaFunction",
+                        "Arn"
+                    ]
+                },
+                "BatchSize": 100,
+                "StartingPosition": "LATEST",
+                "Enabled": true
+            }
+        }
+    },
+    "Outputs": {
+        "LambdaFunctionArn": {
+            "Value": {
+                "Fn::GetAtt": [
+                    "lambdaFunction",
+                    "Arn"
+                ]
+            }
+        },
+        "KinesisStreamArn": {
+            "Value": {
+                "Fn::GetAtt": [
+                    "kinesisStream",
+                    "Arn"
+                ]
+            }
+        }
+    }
+}
